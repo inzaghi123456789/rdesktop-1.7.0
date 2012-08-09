@@ -1,0 +1,109 @@
+#! /bin/sh /usr/share/dpatch/dpatch-run
+## 90_update_smartcard_api.patch by Ludovic Rousseau
+## 
+## All lines beginning with `## DP:' are a description of the patch.
+## DP: Update to libpcscd API change 1.4.100 and later.
+
+@DPATCH@
+--- rdesktop/configure.ac	(révision 1512)
++++ rdesktop/configure.ac	(copie de travail)
+@@ -115,6 +115,23 @@ LIBS="$LIBS -L$ssldir/lib -lcrypto" 
+ rpath="$rpath:$ssldir/lib"
+              ])
+ 
++
++# jared.jennings.ctr@eglin.af.mil 25 Mar 2008
++m4_define([_PKG_CONFIG_IFELSE],
++[if test -n "$PKG_CONFIG"; then
++    PKG_CHECK_EXISTS([$2],
++                     [if AC_RUN_LOG([$PKG_CONFIG --[]$1 "$2"]); then
++                          [$3]
++                      else
++                          [$4]
++                      fi],
++                     [pkg_failed=yes])
++else
++	pkg_failed=untried
++fi[]dnl
++])# _PKG_CONFIG_IFELSE
++
++
+ AC_ARG_ENABLE(smartcard, 
+              [  --enable-smartcard	  Enables smart-card support.
+ 	     ],
+@@ -153,6 +170,13 @@ AC_ARG_ENABLE(smartcard, 
+ 			[AC_MSG_RESULT(yes) AC_DEFINE(WITH_PCSC120, 1, [old version of PCSC])],
+ 			[AC_MSG_RESULT(no)]
+ 		)
++                AC_MSG_CHECKING([for new (>=1.4.100) version of PCSC])
++                _PKG_CONFIG_IFELSE([atleast-version=1.4.100],
++                                   [libpcsclite],
++                                   AC_MSG_RESULT(yes),
++                                   AC_MSG_RESULT(no)
++                                    AC_DEFINE(PCSCLITE_1_4_4_OR_BEFORE, 1,
++                                              [version of PCSC without IDENTITY_SHIFT])) 
+              ])
+ 
+ AC_SUBST(SCARDOBJ)
+--- rdesktop/scard.c	(révision 1512)
++++ rdesktop/scard.c	(copie de travail)
+@@ -244,7 +244,15 @@ scard_enum_devices(uint32 * id, char *op
+ #ifndef MAKE_PROTO
+ /* ---------------------------------- */
+ 
+-/* These two functions depend heavily on the actual implementation of the smart
++/* Changeset 2635 in the PC/SC Lite Subversion repository
++ * <http://svn.debian.org/wsvn/pcsclite/> amends readerfactory.c to shift the
++ * reader context identity by a constant IDENTITY_SHIFT bits (defined at 16
++ * right now), instead of (sizeof(DWORD)/2)*8 bits as cited below, which varies
++ * with the sizeof(DWORD). The first release with this change in it is 1.4.100;
++ * the lengthy comment below still applies to pcsc-lite 1.4.4 and earlier.
++ * - <jared.jennings.ctr@eglin.af.mil>, 25 March 2008
++ *
++ * These two functions depend heavily on the actual implementation of the smart
+  * card handle in PC/SC Lite 1.3.1. Here are the salient bits:
+  *
+  * From winscard.c:331, in SCardConnect:
+@@ -286,22 +294,30 @@ scard_enum_devices(uint32 * id, char *op
+  * nothing, which will not break anything.)
+  *
+  *
+- * - jared.jennings@eglin.af.mil, 2 Aug 2006
++ * - jared.jennings.ctr@eglin.af.mil, 2 Aug 2006
+  */
+ 
+ 
+ static MYPCSC_SCARDHANDLE
+ scHandleToMyPCSC(SERVER_SCARDHANDLE server)
+ {
++#ifdef PCSCLITE_1_4_4_OR_BEFORE
+ 	return (((MYPCSC_SCARDHANDLE) server >> (sizeof(SERVER_DWORD) * 8 / 2) & 0xffff)
+ 		<< (sizeof(MYPCSC_DWORD) * 8 / 2)) + (server & 0xffff);
++#else
++	return server;
++#endif
+ }
+ 
+ static SERVER_SCARDHANDLE
+ scHandleToServer(MYPCSC_SCARDHANDLE mypcsc)
+ {
++#ifdef PCSCLITE_1_4_4_OR_BEFORE
+ 	return ((mypcsc >> (sizeof(MYPCSC_DWORD) * 8 / 2) & 0xffff)
+ 		<< (sizeof(SERVER_DWORD) * 8 / 2)) + (mypcsc & 0xffff);
++#else
++	return mypcsc;
++#endif
+ }
+ 
+ /* ---------------------------------- */
+--- rdesktop/scard.h	(révision 1512)
++++ rdesktop/scard.h	(copie de travail)
+@@ -30,7 +30,7 @@
+  * spreads without limit. The alternative is to patch the heck out of rdesktop,
+  * which is already being done anyway.
+  *
+- * - jared.jennings@eglin.af.mil, 2 Aug 2006
++ * - jared.jennings.ctr@eglin.af.mil, 2 Aug 2006
+  */
+ 
+ #ifdef HAVE_STDINT_H
