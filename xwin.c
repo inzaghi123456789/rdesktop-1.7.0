@@ -290,6 +290,10 @@ static int rop2_map[] = {
 #define SET_FUNCTION(rop2)	{ if (rop2 != ROP2_COPY) XSetFunction(g_display, g_gc, rop2_map[rop2]); }
 #define RESET_FUNCTION(rop2)	{ if (rop2 != ROP2_COPY) XSetFunction(g_display, g_gc, GXcopy); }
 
+
+
+void _updatet();
+
 static seamless_window *
 sw_get_window_by_id(unsigned long id)
 {
@@ -2042,6 +2046,7 @@ ui_create_window(void)
 
 	XStoreName(g_display, g_wnd, g_title);
 	ewmh_set_wm_name(g_wnd, g_title);
+	_updatet();
 
 	if (g_hide_decorations)
 		mwm_hide_decorations(g_wnd);
@@ -2283,6 +2288,40 @@ handle_button_event(XEvent xevent, RD_BOOL down)
 	}
 }
 
+int g_grabbed = 0;
+
+void _updatet()
+{
+  printf("grabbed: %d title: \"%s\'\n", g_grabbed, g_title);
+	if (!g_grabbed)
+	{
+		// add ungrabbed
+	  if (strlen(g_title)>64-strlen(" (ungrabbed)")) return;
+		
+		int pos;
+		pos = strlen(g_title);
+		if (pos < 0) pos=0;
+//		printf("  pos: %d g_title+pos: \"%s\"\n", pos, g_title+pos);
+		
+		if ((pos>strlen(" (ungrabbed)")) && !strncmp(g_title+pos-strlen(" (ungrabbed)"), " (ungrabbed)", strlen(" (ungrabbed)"))) return; 
+	
+		strncpy(g_title+pos, " (ungrabbed)", strlen(" (ungrabbed)"));
+	} else
+	{
+		// remove ungrabbed
+		int pos;
+		if (strlen(g_title)<strlen(" (ungrabbed)")) return;
+		pos = strlen(g_title) -strlen(" (ungrabbed)");
+//		printf("  pos: %d g_title+pos: \"%s\"\n", pos, g_title+pos);
+		if (pos < 0) return;
+		if (strncmp(g_title+pos, " (ungrabbed)", strlen(" (ungrabbed)"))) return;
+		memset(g_title+pos, 0, strlen(" (ungrabbed)"));
+	}
+
+//  printf(" ->grabbed: %d title: \"%s\'\n", g_grabbed, g_title);
+	if (g_wnd) XStoreName(g_display, g_wnd, g_title);
+	if (g_wnd) ewmh_set_wm_name(g_wnd, g_title);
+}
 
 /* Process events in Xlib queue
    Returns 0 after user quit, 1 otherwise */
@@ -2366,13 +2405,29 @@ xwin_process_events(void)
 				DEBUG_KBD(("KeyPress for keysym (0x%lx, %s)\n", keysym,
 					   get_ksname(keysym)));
 
+				printf("nin(%s:%d):: keypress (%d/%.4X)\n", __func__, __LINE__, keysym, keysym);
 				set_keypress_keysym(xevent.xkey.keycode, keysym);
 				ev_time = time(NULL);
 				if (handle_special_keys(keysym, xevent.xkey.state, ev_time, True))
 					break;
 
-				xkeymap_send_keys(keysym, xevent.xkey.keycode, xevent.xkey.state,
-						  ev_time, True, 0);
+				 if (keysym == 'R' && (xevent.xkey.state & (ControlMask | ShiftMask))==(ControlMask | ShiftMask)) { 
+								printf("Ctrl+Shift+R: ungrab\n");
+								XUngrabKeyboard(g_display, CurrentTime);
+								g_grabbed = 0;
+								_updatet();
+//								system("xdotool key --window  0x340000e key \"control+shift+g\"");
+				} else 
+				{
+					if (!g_grabbed)
+					//if (!g_grabbed || time(0)-focusin_time<1)
+					{
+						printf("key dead zone, ignoring...\n");
+						break;
+					}
+					xkeymap_send_keys(keysym, xevent.xkey.keycode, xevent.xkey.state,
+								ev_time, True, 0);
+				}
 				break;
 
 			case KeyRelease:
@@ -2382,6 +2437,7 @@ xwin_process_events(void)
 
 				DEBUG_KBD(("\nKeyRelease for keysym (0x%lx, %s)\n", keysym,
 					   get_ksname(keysym)));
+				printf("nin(%s:%d):: keyrelease (%d/%4X)\n", __func__, __LINE__, keysym, keysym);
 
 				keysym = reset_keypress_keysym(xevent.xkey.keycode, keysym);
 				ev_time = time(NULL);
@@ -2433,8 +2489,12 @@ xwin_process_events(void)
 				g_focused = True;
 				reset_modifier_keys();
 				if (g_grab_keyboard && g_mouse_in_wnd)
+				{
 					XGrabKeyboard(g_display, g_wnd, True,
 						      GrabModeAsync, GrabModeAsync, CurrentTime);
+					g_grabbed = 1;
+					_updatet();
+				}
 
 				sw = sw_get_window_by_wnd(xevent.xfocus.window);
 				if (!sw)
@@ -2467,7 +2527,11 @@ xwin_process_events(void)
 					break;
 				g_focused = False;
 				if (xevent.xfocus.mode == NotifyWhileGrabbed)
+				{
 					XUngrabKeyboard(g_display, CurrentTime);
+					g_grabbed = 0;
+					_updatet();
+				}
 				break;
 
 			case EnterNotify:
@@ -2481,14 +2545,20 @@ xwin_process_events(void)
 					break;
 				}
 				if (g_focused)
+				{
 					XGrabKeyboard(g_display, g_wnd, True,
 						      GrabModeAsync, GrabModeAsync, CurrentTime);
+					g_grabbed = 1;
+					_updatet();
+				}
 				break;
 
 			case LeaveNotify:
 				/* we only register for this event when grab_keyboard */
 				g_mouse_in_wnd = False;
 				XUngrabKeyboard(g_display, CurrentTime);
+				g_grabbed = 0;
+				_updatet();
 				break;
 
 			case Expose:

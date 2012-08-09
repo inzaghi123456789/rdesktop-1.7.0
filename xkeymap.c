@@ -737,6 +737,7 @@ xkeymap_send_keys(uint32 keysym, unsigned int keycode, unsigned int state, uint3
 		  RD_BOOL pressed, uint8 nesting)
 {
 	key_translation tr, *ptr;
+//	printf("send keys: %.8X keysym, keycode: %.8X, state: %.8X\n", keysym, keycode, state);
 	tr = xkeymap_translate_key(keysym, keycode, state);
 
 	if (tr.seq_keysym == 0)
@@ -941,6 +942,28 @@ ui_get_numlock_state(unsigned int state)
 
 
 void
+clear_modifier_keys()
+{
+	unsigned int state = read_keyboard_state();
+
+	/* reset keys */
+	uint32 ev_time;
+	ev_time = time(NULL);
+
+	printf("remote_modifier_state: %.8X\n", remote_modifier_state);
+
+	rdp_send_scancode(ev_time, RDP_KEYRELEASE, SCANCODE_CHAR_LSHIFT);
+	rdp_send_scancode(ev_time, RDP_KEYRELEASE, SCANCODE_CHAR_RSHIFT);
+	rdp_send_scancode(ev_time, RDP_KEYRELEASE, SCANCODE_CHAR_LCTRL);
+	rdp_send_scancode(ev_time, RDP_KEYRELEASE, SCANCODE_CHAR_RCTRL);
+	rdp_send_scancode(ev_time, RDP_KEYRELEASE, SCANCODE_CHAR_LALT);
+	rdp_send_scancode(ev_time, RDP_KEYRELEASE, SCANCODE_CHAR_RALT);
+	remote_modifier_state=0;
+
+	reset_winkey(ev_time);
+	rdp_send_input(ev_time, RDP_INPUT_SYNCHRONIZE, 0, ui_get_numlock_state(state), 0);
+}
+void
 reset_modifier_keys()
 {
 	unsigned int state = read_keyboard_state();
@@ -948,6 +971,8 @@ reset_modifier_keys()
 	/* reset keys */
 	uint32 ev_time;
 	ev_time = time(NULL);
+
+	printf("remote_modifier_state: %.8X\n", remote_modifier_state);
 
 	if (MASK_HAS_BITS(remote_modifier_state, MapLeftShiftMask)
 	    && !get_key_state(state, XK_Shift_L))
