@@ -2417,6 +2417,25 @@ xwin_process_events(void)
 								g_grabbed = 0;
 								_updatet();
 //								system("xdotool key --window  0x340000e key \"control+shift+g\"");
+				} else if (keysym == 'D' && (xevent.xkey.state & (ControlMask | ShiftMask))==(ControlMask | ShiftMask)) { 
+								printf("Ctrl+Shift+D: repaint\n");
+								printf("g_own: %d\n", g_ownbackstore);
+//								XCopyArea(g_display, g_backstore, g_wnd, g_gc, 0, 0, g_width, g_height, 0, 0);
+//								xwin_toggle_fullscreen();
+//								ui_resize_window();
+//									rdp_send_synchronise();
+//									rdp_send_client_window_status(1);
+//									rdp_send_confirm_active();
+//	rdp_send_control(RDP_CTL_REQUEST_CONTROL);
+					key_translation dummy = {};
+					dummy.modifiers = 0;
+					ensure_remote_modifiers(time(NULL), dummy);
+					rdp_send_rect_refresh();
+
+				} else if (keysym == 'C' && (xevent.xkey.state & (ControlMask | ShiftMask))==(ControlMask | ShiftMask)) { 
+								printf("Ctrl+Shift+C: repaint\n");
+								XSetForeground(g_display, g_gc, BlackPixelOfScreen(g_screen));
+								XFillRectangle(g_display, g_ownbackstore ? g_backstore : g_wnd, g_gc, 0, 0, g_width, g_height); \
 				} else 
 				{
 					if (!g_grabbed)
@@ -2564,6 +2583,8 @@ xwin_process_events(void)
 			case Expose:
 				if (xevent.xexpose.window == g_wnd)
 				{
+//					printf("expose event: (x,y): (%d, %d) (w,h): (%d,%d)\n", xevent.xexpose.x, xevent.xexpose.y,
+//						xevent.xexpose.width, xevent.xexpose.height);
 					XCopyArea(g_display, g_backstore, xevent.xexpose.window,
 						  g_gc,
 						  xevent.xexpose.x, xevent.xexpose.y,
@@ -2806,6 +2827,8 @@ ui_paint_bitmap(int x, int y, int cx, int cy, int width, int height, uint8 * dat
 	XImage *image;
 	uint8 *tdata;
 	int bitmap_pad;
+
+	//printf("paint bitmap:  (%d,%d) (%d,%d) (%d, %d)\n", x, y, cx, cy, width, height);
 
 	if (g_server_depth == 8)
 	{
@@ -3217,6 +3240,8 @@ ui_patblt(uint8 opcode,
 {
 	Pixmap fill;
 	uint8 i, ipattern[8];
+
+	//printf("patblt:  (%d,%d) (%d,%d) (%d, %d)\n", x, y, cx, cy);
 
 	SET_FUNCTION(opcode);
 

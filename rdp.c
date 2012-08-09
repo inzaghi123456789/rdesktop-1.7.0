@@ -489,7 +489,7 @@ rdp_send_logon_info(uint32 flags, char *domain, char *user,
 }
 
 /* Send a control PDU */
-static void
+void
 rdp_send_control(uint16 action)
 {
 	STREAM s;
@@ -505,7 +505,7 @@ rdp_send_control(uint16 action)
 }
 
 /* Send a synchronisation PDU */
-static void
+void
 rdp_send_synchronise(void)
 {
 	STREAM s;
@@ -538,6 +538,25 @@ rdp_send_input(uint32 time, uint16 message_type, uint16 device_flags, uint16 par
 
 	s_mark_end(s);
 	rdp_send_data(s, RDP_DATA_PDU_INPUT);
+}
+
+void
+rdp_send_rect_refresh()
+{
+	STREAM s;
+
+	s = rdp_init_data(12);
+
+	out_uint16_le(s, 1);	/* number of events */
+	out_uint16(s, 0);	/* pad */
+
+	out_uint16(s, 0);
+	out_uint16(s, 0);
+	out_uint16(s, g_width-1);
+	out_uint16(s, g_height-1);
+
+	s_mark_end(s);
+	rdp_send_data(s, 0x21);
 }
 
 /* Send a client window information PDU */
@@ -883,7 +902,7 @@ rdp_out_unknown_caps(STREAM s, uint16 id, uint16 length, uint8 * caps)
 
 #define RDP5_FLAG 0x0030
 /* Send a confirm active PDU */
-static void
+void
 rdp_send_confirm_active(void)
 {
 	STREAM s;
@@ -1036,7 +1055,7 @@ rdp_process_server_caps(STREAM s, uint16 length)
 }
 
 /* Respond to a demand active PDU */
-static void
+void
 process_demand_active(STREAM s)
 {
 	uint8 type;
